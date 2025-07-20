@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jakubbbdev/go-logging"
+	"github.com/jakubbbdev/go-logging/pkg/logging"
 )
 
 // RequestLogger middleware for logging HTTP requests

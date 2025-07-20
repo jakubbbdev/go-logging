@@ -20,6 +20,7 @@ go.work
 # Build artifacts
 bin/
 dist/
+build/
 
 # Log files
 *.log
@@ -46,4 +47,12 @@ Thumbs.db
 
 # Temporary files
 tmp/
-temp/ 
+temp/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Debug files
+debug 

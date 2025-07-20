@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jakubbbdev/go-logging"
+	"github.com/jakubbbdev/go-logging/pkg/logging"
 )
 
 func main() {

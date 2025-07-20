@@ -2,7 +2,7 @@
 
 A modern, flexible, and feature-rich logging library for Go applications. This library provides structured logging with multiple output formats, log levels, and customizable handlers.
 
-## Features
+## 🚀 Features
 
 - **Multiple Log Levels**: Debug, Info, Warn, Error, Fatal, Panic
 - **Structured Logging**: JSON and text output formats
@@ -12,13 +12,33 @@ A modern, flexible, and feature-rich logging library for Go applications. This l
 - **Performance Optimized**: Zero-allocation logging for high-performance applications
 - **Thread Safe**: Safe for concurrent use
 
-## Installation
+## 📦 Installation
 
 ```bash
 go get github.com/jakubbbdev/go-logging
 ```
 
-## Quick Start
+## 🏗️ Project Structure
+
+```
+go-logging/
+├── pkg/logging/          # Main library package
+│   ├── logging.go        # Package entry point
+│   ├── logger.go         # Core logger interface and implementation
+│   ├── handlers.go       # Console, file, and multi handlers
+│   ├── formatters.go     # Text and JSON formatters
+│   └── context.go        # Context support and utilities
+├── cmd/examples/         # Example applications
+│   ├── basic/            # Basic usage examples
+│   └── web/              # Web server examples
+├── internal/tests/       # Test files
+├── docs/                 # Documentation
+├── Makefile              # Build and development tools
+├── LICENSE               # MIT License
+└── README.md             # This file
+```
+
+## 🚀 Quick Start
 
 ```go
 package main
@@ -47,7 +67,7 @@ func main() {
 }
 ```
 
-## Configuration
+## ⚙️ Configuration
 
 ### Log Levels
 
@@ -90,7 +110,7 @@ logger.SetHandler(logging.NewMultiHandler(
 ))
 ```
 
-## Advanced Usage
+## 🔧 Advanced Usage
 
 ### Custom Fields
 
@@ -127,7 +147,43 @@ func (h *CustomHandler) Handle(entry *logging.Entry) error {
 logger.SetHandler(&CustomHandler{})
 ```
 
-## Performance
+## 📚 Examples
+
+Check out the examples in the `cmd/examples/` directory:
+
+- **Basic Example**: `go run cmd/examples/basic/main.go`
+- **Web Server Example**: `go run cmd/examples/web/main.go`
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# Run benchmarks
+go test -bench=. ./...
+```
+
+## 🛠️ Development
+
+```bash
+# Build the library
+make build
+
+# Run tests
+make test
+
+# Format code
+make fmt
+
+# Run examples
+make examples
+```
+
+## 📈 Performance
 
 The library is designed for high-performance applications:
 
@@ -136,10 +192,22 @@ The library is designed for high-performance applications:
 - Minimal memory footprint
 - Fast JSON serialization
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## License
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/jakubbbdev/go-logging)
+- [API Documentation](docs/API.md)
+- [Changelog](CHANGELOG.md) 
