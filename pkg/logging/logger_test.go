@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -34,6 +36,30 @@ func TestLogger(t *testing.T) {
 
 	if !strings.Contains(buf.String(), "formatted message") {
 		t.Errorf("Expected log to contain 'formatted message', got: %s", buf.String())
+	}
+}
+
+// TestFastLogging tests the new fast logging methods
+func TestFastLogging(t *testing.T) {
+	var buf bytes.Buffer
+	handler := &testHandler{buf: &buf}
+
+	logger := NewLogger()
+	logger.SetHandler(handler)
+	logger.SetLevel(InfoLevel)
+
+	// Test fast logging methods
+	logger.InfoFast("fast message")
+
+	if !strings.Contains(buf.String(), "fast message") {
+		t.Errorf("Expected log to contain 'fast message', got: %s", buf.String())
+	}
+
+	// Test that fast logging respects log levels
+	buf.Reset()
+	logger.DebugFast("debug fast message")
+	if strings.Contains(buf.String(), "debug fast message") {
+		t.Error("Debug fast message should not be logged at Info level")
 	}
 }
 
@@ -152,6 +178,117 @@ func TestFileHandler(t *testing.T) {
 
 	if !strings.Contains(string(content), "test file logging") {
 		t.Errorf("Expected log file to contain 'test file logging', got: %s", string(content))
+	}
+}
+
+// TestRotatingFileHandler tests rotating file logging
+func TestRotatingFileHandler(t *testing.T) {
+	filename := "test_rotate.log"
+	defer func() {
+		os.Remove(filename)
+		os.Remove(filename + ".1")
+		os.Remove(filename + ".2")
+	}()
+
+	// Create rotating file handler with small max size
+	handler, err := NewRotatingFileHandler(filename, 100, 2)
+	if err != nil {
+		t.Fatalf("Failed to create rotating file handler: %v", err)
+	}
+
+	logger := NewLogger()
+	logger.SetHandler(handler)
+
+	// Write enough logs to trigger rotation
+	for i := 0; i < 10; i++ {
+		logger.Info("test rotating file logging message", i)
+	}
+
+	// Check that files were created
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		t.Error("Expected current log file to exist")
+	}
+
+	if _, err := os.Stat(filename + ".1"); os.IsNotExist(err) {
+		t.Error("Expected rotated log file to exist")
+	}
+}
+
+// TestHTTPHandler tests HTTP logging
+func TestHTTPHandler(t *testing.T) {
+	// Create test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("Expected POST request, got %s", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	handler := NewHTTPHandler(server.URL)
+	logger := NewLogger()
+	logger.SetHandler(handler)
+
+	// Test HTTP logging
+	logger.Info("test HTTP logging")
+	// Note: HTTP logging is asynchronous, so we don't check for errors here
+}
+
+// TestAsyncHandler tests async logging
+func TestAsyncHandler(t *testing.T) {
+	var buf bytes.Buffer
+	baseHandler := &testHandler{buf: &buf}
+
+	asyncHandler := NewAsyncHandler(baseHandler, 10, 2)
+	logger := NewLogger()
+	logger.SetHandler(asyncHandler)
+
+	// Test async logging
+	for i := 0; i < 5; i++ {
+		logger.Info("async message", i)
+	}
+
+	// Give more time for async processing
+	time.Sleep(500 * time.Millisecond)
+
+	// Check if any logs were processed
+	if buf.Len() == 0 {
+		t.Error("Expected async logs to be processed")
+	}
+
+	// Stop the async handler
+	if stopHandler, ok := asyncHandler.(*AsyncHandler); ok {
+		stopHandler.Stop()
+	}
+}
+
+// TestSamplingHandler tests sampling logging
+func TestSamplingHandler(t *testing.T) {
+	var buf bytes.Buffer
+	baseHandler := &testHandler{buf: &buf}
+
+	// Create sampling handler with 20% rate (more reliable for testing)
+	samplingHandler := NewSamplingHandler(baseHandler, 0.2)
+	logger := NewLogger()
+	logger.SetHandler(samplingHandler)
+
+	// Log many messages with varying lengths to ensure sampling works
+	for i := 0; i < 50; i++ {
+		logger.Info("sampled message", i)
+	}
+
+	// Check that some messages were logged (not all due to sampling)
+	logCount := strings.Count(buf.String(), "sampled message")
+	if logCount == 0 {
+		t.Error("Expected some sampled messages to be logged")
+	}
+	// With 20% sampling, we expect roughly 10 logs out of 50
+	// Allow some variance but ensure it's not all logs
+	if logCount >= 50 {
+		t.Errorf("Expected sampling to reduce log count, got %d out of 50", logCount)
 	}
 }
 
@@ -278,6 +415,17 @@ func BenchmarkLogger(b *testing.B) {
 	}
 }
 
+// BenchmarkFastLogger benchmarks the fast logger performance
+func BenchmarkFastLogger(b *testing.B) {
+	logger := NewLogger()
+	logger.SetLevel(InfoLevel)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.InfoFast("benchmark fast message")
+	}
+}
+
 // BenchmarkLoggerWithFields benchmarks logging with fields
 func BenchmarkLoggerWithFields(b *testing.B) {
 	logger := NewLogger()
@@ -292,5 +440,22 @@ func BenchmarkLoggerWithFields(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.WithFields(fields).Info("benchmark message with fields")
+	}
+}
+
+// BenchmarkAsyncLogger benchmarks async logging
+func BenchmarkAsyncLogger(b *testing.B) {
+	var buf bytes.Buffer
+	baseHandler := &testHandler{buf: &buf}
+	asyncHandler := NewAsyncHandler(baseHandler, 1000, 4)
+	defer asyncHandler.(*AsyncHandler).Stop()
+
+	logger := NewLogger()
+	logger.SetHandler(asyncHandler)
+	logger.SetLevel(InfoLevel)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Info("benchmark async message")
 	}
 }

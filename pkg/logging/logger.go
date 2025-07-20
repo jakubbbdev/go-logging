@@ -53,6 +53,16 @@ type Entry struct {
 	Context context.Context
 }
 
+// Reset resets the entry for reuse in the pool
+func (e *Entry) Reset() {
+	e.Level = 0
+	e.Message = ""
+	e.Fields = nil
+	e.Time = time.Time{}
+	e.Caller = ""
+	e.Context = nil
+}
+
 // Logger interface defines the methods for logging
 type Logger interface {
 	Debug(args ...interface{})
@@ -69,6 +79,12 @@ type Logger interface {
 	Fatalf(format string, args ...interface{})
 	Panicf(format string, args ...interface{})
 
+	// Fast logging methods for performance-critical applications
+	DebugFast(msg string)
+	InfoFast(msg string)
+	WarnFast(msg string)
+	ErrorFast(msg string)
+
 	WithFields(fields Fields) Logger
 	WithContext(ctx context.Context) Logger
 	SetLevel(level Level)
@@ -84,6 +100,13 @@ type Handler interface {
 // Formatter interface for formatting log entries
 type Formatter interface {
 	Format(entry *Entry) ([]byte, error)
+}
+
+// Entry pool for reducing allocations
+var entryPool = sync.Pool{
+	New: func() interface{} {
+		return &Entry{}
+	},
 }
 
 // logger implements the Logger interface
@@ -160,18 +183,28 @@ func (l *logger) WithContext(ctx context.Context) Logger {
 	}
 }
 
+// getEntryFromPool gets an entry from the pool
+func getEntryFromPool() *Entry {
+	return entryPool.Get().(*Entry)
+}
+
+// putEntryToPool returns an entry to the pool
+func putEntryToPool(entry *Entry) {
+	entry.Reset()
+	entryPool.Put(entry)
+}
+
 // log creates and handles a log entry
 func (l *logger) log(level Level, args ...interface{}) {
 	if level < l.level {
 		return
 	}
 
-	entry := &Entry{
-		Level:   level,
-		Message: fmt.Sprint(args...),
-		Fields:  l.fields,
-		Time:    time.Now(),
-	}
+	entry := getEntryFromPool()
+	entry.Level = level
+	entry.Message = fmt.Sprint(args...)
+	entry.Fields = l.fields
+	entry.Time = time.Now()
 
 	l.mu.RLock()
 	handler := l.handler
@@ -180,6 +213,8 @@ func (l *logger) log(level Level, args ...interface{}) {
 	if handler != nil {
 		handler.Handle(entry)
 	}
+
+	putEntryToPool(entry)
 }
 
 // logf creates and handles a formatted log entry
@@ -188,12 +223,11 @@ func (l *logger) logf(level Level, format string, args ...interface{}) {
 		return
 	}
 
-	entry := &Entry{
-		Level:   level,
-		Message: fmt.Sprintf(format, args...),
-		Fields:  l.fields,
-		Time:    time.Now(),
-	}
+	entry := getEntryFromPool()
+	entry.Level = level
+	entry.Message = fmt.Sprintf(format, args...)
+	entry.Fields = l.fields
+	entry.Time = time.Now()
 
 	l.mu.RLock()
 	handler := l.handler
@@ -202,6 +236,31 @@ func (l *logger) logf(level Level, format string, args ...interface{}) {
 	if handler != nil {
 		handler.Handle(entry)
 	}
+
+	putEntryToPool(entry)
+}
+
+// logFast creates and handles a log entry without string formatting (for performance)
+func (l *logger) logFast(level Level, msg string) {
+	if level < l.level {
+		return
+	}
+
+	entry := getEntryFromPool()
+	entry.Level = level
+	entry.Message = msg
+	entry.Fields = l.fields
+	entry.Time = time.Now()
+
+	l.mu.RLock()
+	handler := l.handler
+	l.mu.RUnlock()
+
+	if handler != nil {
+		handler.Handle(entry)
+	}
+
+	putEntryToPool(entry)
 }
 
 // Debug logs a debug message
@@ -266,4 +325,21 @@ func (l *logger) Fatalf(format string, args ...interface{}) {
 func (l *logger) Panicf(format string, args ...interface{}) {
 	l.logf(PanicLevel, format, args...)
 	panic(fmt.Sprintf(format, args...))
+}
+
+// Fast logging methods for performance-critical applications
+func (l *logger) DebugFast(msg string) {
+	l.logFast(DebugLevel, msg)
+}
+
+func (l *logger) InfoFast(msg string) {
+	l.logFast(InfoLevel, msg)
+}
+
+func (l *logger) WarnFast(msg string) {
+	l.logFast(WarnLevel, msg)
+}
+
+func (l *logger) ErrorFast(msg string) {
+	l.logFast(ErrorLevel, msg)
 }

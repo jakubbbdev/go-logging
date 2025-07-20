@@ -1,15 +1,17 @@
 # Go Logging Library
 
-A modern, flexible, and feature-rich logging library for Go applications. This library provides structured logging with multiple output formats, log levels, and customizable handlers.
+A modern, flexible, and feature-rich logging library for Go applications. This library provides structured logging with multiple output formats, log levels, and customizable handlers with **performance optimizations** and **advanced features**.
 
 ## 🚀 Features
 
 - **Multiple Log Levels**: Debug, Info, Warn, Error, Fatal, Panic
 - **Structured Logging**: JSON and text output formats
-- **Customizable Handlers**: Console, file, and custom handlers
+- **Customizable Handlers**: Console, file, rotating file, HTTP, and custom handlers
+- **Performance Optimized**: Zero-allocation logging with entry pooling
+- **Async Logging**: Non-blocking logging with worker pools
+- **Log Sampling**: Reduce log volume with configurable sampling rates
 - **Color Support**: Colored output for better readability
 - **Context Support**: Add fields and context to log entries
-- **Performance Optimized**: Zero-allocation logging for high-performance applications
 - **Thread Safe**: Safe for concurrent use
 
 ## 📦 Installation
@@ -25,13 +27,14 @@ go-logging/
 ├── pkg/logging/          # Main library package
 │   ├── logging.go        # Package entry point
 │   ├── logger.go         # Core logger interface and implementation
-│   ├── handlers.go       # Console, file, and multi handlers
+│   ├── handlers.go       # Console, file, rotating file, HTTP, async handlers
 │   ├── formatters.go     # Text and JSON formatters
-│   └── context.go        # Context support and utilities
+│   ├── context.go        # Context support and utilities
+│   └── logger_test.go    # Test files
 ├── cmd/examples/         # Example applications
 │   ├── basic/            # Basic usage examples
-│   └── web/              # Web server examples
-├── internal/tests/       # Test files
+│   ├── web/              # Web server examples
+│   └── advanced/         # Advanced features demo
 ├── docs/                 # Documentation
 ├── Makefile              # Build and development tools
 ├── LICENSE               # MIT License
@@ -44,7 +47,7 @@ go-logging/
 package main
 
 import (
-    "github.com/jakubbbdev/go-logging"
+    "github.com/jakubbbdev/go-logging/pkg/logging"
 )
 
 func main() {
@@ -65,6 +68,74 @@ func main() {
         "action":  "login",
     }).Info("User logged in successfully")
 }
+```
+
+## ⚡ Performance Features
+
+### Fast Logging Methods
+```go
+// Zero-allocation logging for performance-critical applications
+logger.InfoFast("fast message")
+logger.DebugFast("debug message")
+logger.WarnFast("warning message")
+logger.ErrorFast("error message")
+```
+
+### Entry Pooling
+The library uses object pooling to reduce memory allocations:
+```go
+// Automatic entry pooling - no manual configuration needed
+logger.Info("This uses pooled entries automatically")
+```
+
+## 🔧 Advanced Handlers
+
+### Rotating File Handler
+```go
+// Automatically rotate log files when they reach a certain size
+rotatingHandler, err := logging.NewRotatingFileHandler("app.log", 10*1024*1024, 5) // 10MB, 5 files
+if err != nil {
+    log.Fatal(err)
+}
+defer rotatingHandler.(*logging.RotatingFileHandler).Close()
+
+logger.SetHandler(rotatingHandler)
+```
+
+### Async Handler
+```go
+// Non-blocking logging with worker pools
+baseHandler := logging.NewConsoleHandler()
+asyncHandler := logging.NewAsyncHandler(baseHandler, 1000, 4) // buffer size, workers
+defer asyncHandler.(*logging.AsyncHandler).Stop()
+
+logger.SetHandler(asyncHandler)
+```
+
+### HTTP Handler
+```go
+// Send logs to remote servers via HTTP
+httpHandler := logging.NewHTTPHandler("https://logs.example.com/api/logs")
+logger.SetHandler(httpHandler)
+```
+
+### Sampling Handler
+```go
+// Reduce log volume with sampling
+baseHandler := logging.NewConsoleHandler()
+samplingHandler := logging.NewSamplingHandler(baseHandler, 0.1) // 10% of logs
+logger.SetHandler(samplingHandler)
+```
+
+### Multi Handler
+```go
+// Log to multiple destinations simultaneously
+multiHandler := logging.NewMultiHandler(
+    logging.NewConsoleHandler(),
+    fileHandler,
+    rotatingHandler,
+)
+logger.SetHandler(multiHandler)
 ```
 
 ## ⚙️ Configuration
@@ -93,24 +164,27 @@ logger.SetFormatter(logging.NewTextFormatter())
 logger.SetFormatter(&MyCustomFormatter{})
 ```
 
-### Handlers
-
-```go
-// Console handler (default)
-logger.SetHandler(logging.NewConsoleHandler())
-
-// File handler
-fileHandler := logging.NewFileHandler("app.log")
-logger.SetHandler(fileHandler)
-
-// Multiple handlers
-logger.SetHandler(logging.NewMultiHandler(
-    logging.NewConsoleHandler(),
-    logging.NewFileHandler("app.log"),
-))
-```
-
 ## 🔧 Advanced Usage
+
+### Production Setup
+```go
+// Production-ready logging setup
+logger := logging.NewLogger()
+logger.SetLevel(logging.InfoLevel)
+
+// Create handlers
+consoleHandler := logging.NewConsoleHandler()
+rotatingHandler, _ := logging.NewRotatingFileHandler("production.log", 10*1024*1024, 5)
+defer rotatingHandler.(*logging.RotatingFileHandler).Close()
+
+// Create async multi handler
+multiHandler := logging.NewMultiHandler(consoleHandler, rotatingHandler)
+asyncHandler := logging.NewAsyncHandler(multiHandler, 1000, 8)
+defer asyncHandler.(*logging.AsyncHandler).Stop()
+
+logger.SetHandler(asyncHandler)
+logger.SetFormatter(logging.NewJSONFormatter())
+```
 
 ### Custom Fields
 
@@ -153,44 +227,54 @@ Check out the examples in the `cmd/examples/` directory:
 
 - **Basic Example**: `go run cmd/examples/basic/main.go`
 - **Web Server Example**: `go run cmd/examples/web/main.go`
+- **Advanced Features**: `go run cmd/examples/advanced/main.go`
 
 ## 🧪 Testing
 
 ```bash
 # Run all tests
-go test ./...
+go test ./pkg/logging
 
 # Run tests with coverage
-go test -cover ./...
+go test -cover ./pkg/logging
 
 # Run benchmarks
-go test -bench=. ./...
+go test -bench=. ./pkg/logging
 ```
 
 ## 🛠️ Development
 
 ```bash
 # Build the library
-make build
+go build ./pkg/logging
 
 # Run tests
-make test
+go test ./pkg/logging
 
 # Format code
-make fmt
+go fmt ./pkg/logging ./cmd/examples
 
 # Run examples
-make examples
+go run cmd/examples/basic/main.go
+go run cmd/examples/advanced/main.go
 ```
 
 ## 📈 Performance
 
 The library is designed for high-performance applications:
 
-- Zero-allocation logging for common use cases
-- Efficient field handling
-- Minimal memory footprint
-- Fast JSON serialization
+- **Zero-allocation logging** for common use cases
+- **Entry pooling** to reduce memory allocations
+- **Async logging** for non-blocking operations
+- **Efficient field handling**
+- **Fast JSON serialization**
+- **Configurable sampling** to reduce log volume
+
+### Benchmark Results
+```bash
+# Run benchmarks to see performance metrics
+go test -bench=. -benchmem ./pkg/logging
+```
 
 ## 🤝 Contributing
 
