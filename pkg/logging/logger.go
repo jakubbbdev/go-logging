@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -154,6 +155,20 @@ func WithHook(hook Hook) Option {
 	}
 }
 
+// WithCaller enables caller (file:line) information in log entries.
+func WithCaller(enabled bool) Option {
+	return func(l *logger) {
+		l.includeCaller = enabled
+	}
+}
+
+// WithStacktrace enables stacktrace for error/fatal/panic logs.
+func WithStacktrace(enabled bool) Option {
+	return func(l *logger) {
+		l.includeStacktrace = enabled
+	}
+}
+
 // Entry pool for reducing allocations
 var entryPool = sync.Pool{
 	New: func() interface{} {
@@ -163,12 +178,14 @@ var entryPool = sync.Pool{
 
 // logger implements the Logger interface
 type logger struct {
-	level     Level
-	handler   Handler
-	formatter Formatter
-	fields    Fields
-	hooks     []Hook
-	mu        sync.RWMutex
+	level             Level
+	handler           Handler
+	formatter         Formatter
+	fields            Fields
+	hooks             []Hook
+	mu                sync.RWMutex
+	includeCaller     bool
+	includeStacktrace bool
 }
 
 // NewLogger creates a new logger instance with optional configuration.
@@ -288,6 +305,10 @@ func (l *logger) log(level Level, args ...interface{}) {
 	entry.Fields = l.fields
 	entry.Time = time.Now()
 
+	if l.includeCaller {
+		entry.Caller = callerString()
+	}
+
 	l.mu.RLock()
 	handler := l.handler
 	hooks := l.hooks
@@ -299,6 +320,10 @@ func (l *logger) log(level Level, args ...interface{}) {
 
 	if handler != nil {
 		handler.Handle(entry)
+	}
+
+	if l.includeStacktrace && (level == ErrorLevel || level == FatalLevel || level == PanicLevel) {
+		entry.Fields["stacktrace"] = stacktraceString()
 	}
 
 	putEntryToPool(entry)
@@ -316,6 +341,10 @@ func (l *logger) logf(level Level, format string, args ...interface{}) {
 	entry.Fields = l.fields
 	entry.Time = time.Now()
 
+	if l.includeCaller {
+		entry.Caller = callerString()
+	}
+
 	l.mu.RLock()
 	handler := l.handler
 	hooks := l.hooks
@@ -327,6 +356,10 @@ func (l *logger) logf(level Level, format string, args ...interface{}) {
 
 	if handler != nil {
 		handler.Handle(entry)
+	}
+
+	if l.includeStacktrace && (level == ErrorLevel || level == FatalLevel || level == PanicLevel) {
+		entry.Fields["stacktrace"] = stacktraceString()
 	}
 
 	putEntryToPool(entry)
@@ -344,6 +377,10 @@ func (l *logger) logFast(level Level, msg string) {
 	entry.Fields = l.fields
 	entry.Time = time.Now()
 
+	if l.includeCaller {
+		entry.Caller = callerString()
+	}
+
 	l.mu.RLock()
 	handler := l.handler
 	hooks := l.hooks
@@ -355,6 +392,10 @@ func (l *logger) logFast(level Level, msg string) {
 
 	if handler != nil {
 		handler.Handle(entry)
+	}
+
+	if l.includeStacktrace && (level == ErrorLevel || level == FatalLevel || level == PanicLevel) {
+		entry.Fields["stacktrace"] = stacktraceString()
 	}
 
 	putEntryToPool(entry)
@@ -439,4 +480,19 @@ func (l *logger) WarnFast(msg string) {
 
 func (l *logger) ErrorFast(msg string) {
 	l.logFast(ErrorLevel, msg)
+}
+
+// Helper functions:
+func callerString() string {
+	_, file, line, ok := runtime.Caller(3)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", file, line)
+}
+
+func stacktraceString() string {
+	buf := make([]byte, 2048)
+	n := runtime.Stack(buf, false)
+	return string(buf[:n])
 }

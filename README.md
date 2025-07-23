@@ -113,6 +113,30 @@ logger.WithFields(logging.Fields{
 }).Error("Custom colored error!")
 ```
 
+## 🧑‍💻 Caller, Stacktrace, Emojis & Field Masking
+
+```go
+logger := logging.NewLogger(
+    logging.WithCaller(true),
+    logging.WithStacktrace(true),
+    logging.WithFormatter(logging.NewTextFormatter(
+        logging.WithTextFormatterEmojis(map[logging.Level]string{
+            logging.DebugLevel: "🐛 ",
+            logging.InfoLevel:  "ℹ️ ",
+            logging.WarnLevel:  "⚠️ ",
+            logging.ErrorLevel: "❌ ",
+        }),
+        logging.WithTextFormatterFieldMasking([]string{"password", "token"}, "****"),
+    )),
+)
+
+logger.WithFields(logging.Fields{
+    "user_id": 123,
+    "password": "supersecret",
+    "token":    "abcdefg",
+}).Error("Login failed!")
+```
+
 ## ⚡ Performance Features
 
 ### Fast Logging Methods

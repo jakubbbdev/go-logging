@@ -23,6 +23,8 @@ type TextFormatter struct {
 	LevelPrefix     map[Level]string
 	LevelSuffix     map[Level]string
 	FieldOrder      []string
+	maskFields      []string
+	maskValue       string
 }
 
 // NewTextFormatter creates a new text formatter with options.
@@ -43,6 +45,8 @@ func NewTextFormatter(opts ...TextFormatterOption) Formatter {
 		LevelPrefix: map[Level]string{},
 		LevelSuffix: map[Level]string{},
 		FieldOrder:  nil,
+		maskFields:  nil,
+		maskValue:   "",
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -91,6 +95,26 @@ func WithTextFormatterSuffix(level Level, suffix string) TextFormatterOption {
 func WithTextFormatterFieldOrder(order []string) TextFormatterOption {
 	return func(f *TextFormatter) {
 		f.FieldOrder = order
+	}
+}
+
+// WithTextFormatterEmojis enables emoji/unicode per log level.
+func WithTextFormatterEmojis(emojis map[Level]string) TextFormatterOption {
+	return func(f *TextFormatter) {
+		if f.LevelPrefix == nil {
+			f.LevelPrefix = map[Level]string{}
+		}
+		for lvl, emoji := range emojis {
+			f.LevelPrefix[lvl] = emoji + f.LevelPrefix[lvl]
+		}
+	}
+}
+
+// WithTextFormatterFieldMasking enables masking of sensitive fields.
+func WithTextFormatterFieldMasking(maskFields []string, mask string) TextFormatterOption {
+	return func(f *TextFormatter) {
+		f.maskFields = maskFields
+		f.maskValue = mask
 	}
 }
 
@@ -149,7 +173,11 @@ func (f *TextFormatter) formatFields(fields Fields) string {
 	if f.FieldOrder != nil && len(f.FieldOrder) > 0 {
 		for _, k := range f.FieldOrder {
 			if v, ok := fields[k]; ok {
-				parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+				if f.isMaskedField(k) {
+					parts = append(parts, fmt.Sprintf("%s=%s", k, f.maskValue))
+				} else {
+					parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+				}
 			}
 		}
 		// Add any remaining fields not in FieldOrder
@@ -162,7 +190,11 @@ func (f *TextFormatter) formatFields(fields Fields) string {
 				}
 			}
 			if !found {
-				parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+				if f.isMaskedField(k) {
+					parts = append(parts, fmt.Sprintf("%s=%s", k, f.maskValue))
+				} else {
+					parts = append(parts, fmt.Sprintf("%s=%v", k, v))
+				}
 			}
 		}
 	} else {
@@ -173,11 +205,25 @@ func (f *TextFormatter) formatFields(fields Fields) string {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			parts = append(parts, fmt.Sprintf("%s=%v", k, fields[k]))
+			if f.isMaskedField(k) {
+				parts = append(parts, fmt.Sprintf("%s=%s", k, f.maskValue))
+			} else {
+				parts = append(parts, fmt.Sprintf("%s=%v", k, fields[k]))
+			}
 		}
 	}
 
 	return fmt.Sprintf("{%s}", strings.Join(parts, ", "))
+}
+
+// maskFields and maskValue are internal fields for masking
+func (f *TextFormatter) isMaskedField(key string) bool {
+	for _, mf := range f.maskFields {
+		if mf == key {
+			return true
+		}
+	}
+	return false
 }
 
 // JSONFormatter formats log entries as JSON
