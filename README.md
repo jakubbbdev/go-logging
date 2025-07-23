@@ -87,6 +87,32 @@ func ExampleLogger() {
 }
 ```
 
+## 🎨 Custom Colors, Timestamp & Field Order
+
+```go
+import "github.com/fatih/color"
+
+logger := logging.NewLogger(
+    logging.WithFormatter(logging.NewTextFormatter(
+        logging.WithTextFormatterColors(map[logging.Level]*color.Color{
+            logging.InfoLevel:  color.New(color.FgHiBlue, color.Bold),
+            logging.ErrorLevel: color.New(color.FgHiRed, color.Bold, color.BgBlack),
+        }),
+        logging.WithTextFormatterTimestampFormat("15:04:05"),
+        logging.WithTextFormatterLevelPadding(7),
+        logging.WithTextFormatterPrefix(logging.ErrorLevel, "🔥 "),
+        logging.WithTextFormatterSuffix(logging.InfoLevel, " ℹ️"),
+        logging.WithTextFormatterFieldOrder([]string{"user_id", "action", "ip"}),
+    )),
+)
+
+logger.WithFields(logging.Fields{
+    "user_id": 123,
+    "action":  "login",
+    "ip":      "192.168.1.1",
+}).Error("Custom colored error!")
+```
+
 ## ⚡ Performance Features
 
 ### Fast Logging Methods
@@ -233,72 +259,4 @@ logger.SetHandler(&CustomHandler{})
 Check out the examples in the `cmd/examples/` directory:
 
 - **Basic Example**: `go run cmd/examples/basic/main.go`
-- **Web Server Example**: `go run cmd/examples/web/main.go`
-- **Advanced Features**: `go run cmd/examples/advanced/main.go`
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-go test ./pkg/logging
-
-# Run tests with coverage
-go test -cover ./pkg/logging
-
-# Run benchmarks
-go test -bench=. ./pkg/logging
-```
-
-## 🛠️ Development
-
-```bash
-# Build the library
-go build ./pkg/logging
-
-# Run tests
-go test ./pkg/logging
-
-# Format code
-go fmt ./pkg/logging ./cmd/examples
-
-# Run examples
-go run cmd/examples/basic/main.go
-go run cmd/examples/advanced/main.go
-```
-
-## 📈 Performance
-
-The library is designed for high-performance applications:
-
-- **Zero-allocation logging** for common use cases
-- **Entry pooling** to reduce memory allocations
-- **Async logging** for non-blocking operations
-- **Efficient field handling**
-- **Fast JSON serialization**
-- **Configurable sampling** to reduce log volume
-
-### Benchmark Results
-```bash
-# Run benchmarks to see performance metrics
-go test -bench=. -benchmem ./pkg/logging
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🔗 Links
-
-- [GitHub Repository](https://github.com/jakubbbdev/go-logging)
-- [API Documentation](docs/API.md)
-- [Changelog](CHANGELOG.md) 
+- **Web Server Example**: `
