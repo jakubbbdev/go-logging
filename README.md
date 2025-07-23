@@ -12,6 +12,7 @@ A modern, flexible, and feature-rich logging library for Go applications. This l
 - **Log Sampling**: Reduce log volume with configurable sampling rates
 - **Color Support**: Colored output for better readability
 - **Context Support**: Add fields and context to log entries
+- **Hooks**: Add custom hooks for metrics, audit, etc.
 - **Thread Safe**: Safe for concurrent use
 
 ## 📦 Installation
@@ -41,7 +42,7 @@ go-logging/
 └── README.md             # This file
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Functional Options)
 
 ```go
 package main
@@ -51,22 +52,38 @@ import (
 )
 
 func main() {
-    // Create a new logger
-    logger := logging.NewLogger()
-    
-    // Set log level
-    logger.SetLevel(logging.InfoLevel)
-    
-    // Log messages
-    logger.Info("Application started")
-    logger.Warn("This is a warning message")
-    logger.Error("An error occurred")
-    
-    // Structured logging with fields
-    logger.WithFields(logging.Fields{
-        "user_id": 123,
-        "action":  "login",
-    }).Info("User logged in successfully")
+    logger := logging.NewLogger(
+        logging.WithLevel(logging.DebugLevel),
+        logging.WithFormatter(logging.NewJSONFormatter()),
+        logging.WithHandler(logging.NewRotatingFileHandler("app.log", 10*1024*1024, 5)),
+        logging.WithDefaultFields(logging.Fields{"service": "api"}),
+        logging.WithHook(func(entry *logging.Entry) {
+            // Custom hook: z.B. Metrics, Audit, Sentry, ...
+        }),
+    )
+
+    logger.Info("Application started!")
+    logger.WithFields(logging.Fields{"user_id": 42}).Warn("User warning!")
+}
+```
+
+## 📝 GoDoc Example
+
+```go
+// ExampleLogger demonstrates the new functional options API and hooks.
+func ExampleLogger() {
+    logger := logging.NewLogger(
+        logging.WithLevel(logging.InfoLevel),
+        logging.WithFormatter(logging.NewTextFormatter()),
+        logging.WithDefaultFields(logging.Fields{"env": "dev"}),
+        logging.WithHook(func(entry *logging.Entry) {
+            if entry.Level == logging.ErrorLevel {
+                // Send to Sentry, Prometheus, etc.
+            }
+        }),
+    )
+    logger.Info("Hello, world!")
+    // Output: [INFO] Hello, world! {env=dev}
 }
 ```
 
@@ -169,21 +186,11 @@ logger.SetFormatter(&MyCustomFormatter{})
 ### Production Setup
 ```go
 // Production-ready logging setup
-logger := logging.NewLogger()
-logger.SetLevel(logging.InfoLevel)
-
-// Create handlers
-consoleHandler := logging.NewConsoleHandler()
-rotatingHandler, _ := logging.NewRotatingFileHandler("production.log", 10*1024*1024, 5)
-defer rotatingHandler.(*logging.RotatingFileHandler).Close()
-
-// Create async multi handler
-multiHandler := logging.NewMultiHandler(consoleHandler, rotatingHandler)
-asyncHandler := logging.NewAsyncHandler(multiHandler, 1000, 8)
-defer asyncHandler.(*logging.AsyncHandler).Stop()
-
-logger.SetHandler(asyncHandler)
-logger.SetFormatter(logging.NewJSONFormatter())
+logger := logging.NewLogger(
+    logging.WithLevel(logging.InfoLevel),
+    logging.WithHandler(logging.NewRotatingFileHandler("production.log", 10*1024*1024, 5)),
+    logging.WithFormatter(logging.NewJSONFormatter()),
+)
 ```
 
 ### Custom Fields

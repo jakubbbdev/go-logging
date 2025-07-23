@@ -9,6 +9,8 @@ import (
 )
 
 // Level represents the logging level
+//
+// Available levels: Debug, Info, Warn, Error, Fatal, Panic.
 type Level int
 
 const (
@@ -44,6 +46,8 @@ func (l Level) String() string {
 type Fields map[string]interface{}
 
 // Entry represents a log entry
+//
+// Contains all information about a single log event.
 type Entry struct {
 	Level   Level
 	Message string
@@ -63,7 +67,9 @@ func (e *Entry) Reset() {
 	e.Context = nil
 }
 
-// Logger interface defines the methods for logging
+// Logger is the main logging interface.
+//
+// Use NewLogger(...) to create a new logger instance.
 type Logger interface {
 	Debug(args ...interface{})
 	Info(args ...interface{})
@@ -90,6 +96,9 @@ type Logger interface {
 	SetLevel(level Level)
 	SetHandler(handler Handler)
 	SetFormatter(formatter Formatter)
+
+	// AddHook adds a hook function that is called for every log entry
+	AddHook(hook Hook)
 }
 
 // Handler interface for handling log entries
@@ -100,6 +109,49 @@ type Handler interface {
 // Formatter interface for formatting log entries
 type Formatter interface {
 	Format(entry *Entry) ([]byte, error)
+}
+
+// Hook is a function that is called for every log entry before it is handled.
+type Hook func(entry *Entry)
+
+// Option is a functional option for configuring the logger.
+type Option func(*logger)
+
+// WithLevel sets the log level for the logger.
+func WithLevel(level Level) Option {
+	return func(l *logger) {
+		l.level = level
+	}
+}
+
+// WithHandler sets the handler for the logger.
+func WithHandler(handler Handler) Option {
+	return func(l *logger) {
+		l.handler = handler
+	}
+}
+
+// WithFormatter sets the formatter for the logger.
+func WithFormatter(formatter Formatter) Option {
+	return func(l *logger) {
+		l.formatter = formatter
+	}
+}
+
+// WithDefaultFields sets default fields for the logger.
+func WithDefaultFields(fields Fields) Option {
+	return func(l *logger) {
+		for k, v := range fields {
+			l.fields[k] = v
+		}
+	}
+}
+
+// WithHook adds a hook to the logger.
+func WithHook(hook Hook) Option {
+	return func(l *logger) {
+		l.hooks = append(l.hooks, hook)
+	}
 }
 
 // Entry pool for reducing allocations
@@ -115,17 +167,31 @@ type logger struct {
 	handler   Handler
 	formatter Formatter
 	fields    Fields
+	hooks     []Hook
 	mu        sync.RWMutex
 }
 
-// NewLogger creates a new logger instance
-func NewLogger() Logger {
-	return &logger{
+// NewLogger creates a new logger instance with optional configuration.
+//
+// Example:
+//
+//	logger := logging.NewLogger(
+//	    logging.WithLevel(logging.DebugLevel),
+//	    logging.WithFormatter(logging.NewJSONFormatter()),
+//	    logging.WithHandler(logging.NewRotatingFileHandler("app.log", 10*1024*1024, 5)),
+//	)
+func NewLogger(opts ...Option) Logger {
+	l := &logger{
 		level:     InfoLevel,
 		handler:   NewConsoleHandler(),
 		formatter: NewTextFormatter(),
 		fields:    make(Fields),
+		hooks:     make([]Hook, 0),
 	}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 // SetLevel sets the logging level
@@ -149,6 +215,13 @@ func (l *logger) SetFormatter(formatter Formatter) {
 	l.formatter = formatter
 }
 
+// AddHook adds a hook function to the logger.
+func (l *logger) AddHook(hook Hook) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.hooks = append(l.hooks, hook)
+}
+
 // WithFields returns a new logger with the given fields
 func (l *logger) WithFields(fields Fields) Logger {
 	l.mu.RLock()
@@ -167,6 +240,7 @@ func (l *logger) WithFields(fields Fields) Logger {
 		handler:   l.handler,
 		formatter: l.formatter,
 		fields:    newFields,
+		hooks:     l.hooks,
 	}
 }
 
@@ -180,6 +254,7 @@ func (l *logger) WithContext(ctx context.Context) Logger {
 		handler:   l.handler,
 		formatter: l.formatter,
 		fields:    l.fields,
+		hooks:     l.hooks,
 	}
 }
 
@@ -192,6 +267,13 @@ func getEntryFromPool() *Entry {
 func putEntryToPool(entry *Entry) {
 	entry.Reset()
 	entryPool.Put(entry)
+}
+
+// runHooks runs all hooks for the entry
+func (l *logger) runHooks(entry *Entry) {
+	for _, hook := range l.hooks {
+		hook(entry)
+	}
 }
 
 // log creates and handles a log entry
@@ -208,7 +290,12 @@ func (l *logger) log(level Level, args ...interface{}) {
 
 	l.mu.RLock()
 	handler := l.handler
+	hooks := l.hooks
 	l.mu.RUnlock()
+
+	for _, hook := range hooks {
+		hook(entry)
+	}
 
 	if handler != nil {
 		handler.Handle(entry)
@@ -231,7 +318,12 @@ func (l *logger) logf(level Level, format string, args ...interface{}) {
 
 	l.mu.RLock()
 	handler := l.handler
+	hooks := l.hooks
 	l.mu.RUnlock()
+
+	for _, hook := range hooks {
+		hook(entry)
+	}
 
 	if handler != nil {
 		handler.Handle(entry)
@@ -254,7 +346,12 @@ func (l *logger) logFast(level Level, msg string) {
 
 	l.mu.RLock()
 	handler := l.handler
+	hooks := l.hooks
 	l.mu.RUnlock()
+
+	for _, hook := range hooks {
+		hook(entry)
+	}
 
 	if handler != nil {
 		handler.Handle(entry)
