@@ -284,3 +284,18 @@ Check out the examples in the `cmd/examples/` directory:
 
 - **Basic Example**: `go run cmd/examples/basic/main.go`
 - **Web Server Example**: `
+```
+## 🆕 Eigene Logging-Levels
+
+```go
+// Registriere ein neues Level
+var AuditLevel = logging.RegisterLevel("audit", 25)
+
+logger := logging.NewLogger(
+    logging.WithLevel(logging.DebugLevel),
+)
+
+logger.Log(AuditLevel, "User audit event!", 123)
+logger.Logf(AuditLevel, "Audit for user %d", 123)
+logger.Log(logging.RegisterLevel("trace", 5), "Trace message!")
+```

@@ -9,38 +9,51 @@ import (
 	"time"
 )
 
-// Level represents the logging level
+// Level represents a logging level (built-in or custom).
 //
-// Available levels: Debug, Info, Warn, Error, Fatal, Panic.
-type Level int
+// Use RegisterLevel to add your own levels.
+type Level struct {
+	Name  string
+	Value int
+}
 
-const (
-	DebugLevel Level = iota
-	InfoLevel
-	WarnLevel
-	ErrorLevel
-	FatalLevel
-	PanicLevel
+var (
+	DebugLevel   = Level{"debug", 10}
+	InfoLevel    = Level{"info", 20}
+	WarnLevel    = Level{"warn", 30}
+	ErrorLevel   = Level{"error", 40}
+	FatalLevel   = Level{"fatal", 50}
+	PanicLevel   = Level{"panic", 60}
+	customLevels = make(map[string]Level)
+	levelOrder   = []Level{DebugLevel, InfoLevel, WarnLevel, ErrorLevel, FatalLevel, PanicLevel}
+	levelMu      sync.RWMutex
 )
+
+// RegisterLevel registers a new custom log level.
+func RegisterLevel(name string, value int) Level {
+	levelMu.Lock()
+	defer levelMu.Unlock()
+	lvl := Level{Name: name, Value: value}
+	customLevels[name] = lvl
+	levelOrder = append(levelOrder, lvl)
+	return lvl
+}
+
+// ParseLevel returns a Level by name (case-insensitive).
+func ParseLevel(name string) (Level, bool) {
+	levelMu.RLock()
+	defer levelMu.RUnlock()
+	for _, lvl := range levelOrder {
+		if lvl.Name == name {
+			return lvl, true
+		}
+	}
+	return Level{"unknown", 0}, false
+}
 
 // String returns the string representation of the level
 func (l Level) String() string {
-	switch l {
-	case DebugLevel:
-		return "debug"
-	case InfoLevel:
-		return "info"
-	case WarnLevel:
-		return "warn"
-	case ErrorLevel:
-		return "error"
-	case FatalLevel:
-		return "fatal"
-	case PanicLevel:
-		return "panic"
-	default:
-		return "unknown"
-	}
+	return l.Name
 }
 
 // Fields represents key-value pairs for structured logging
@@ -60,7 +73,7 @@ type Entry struct {
 
 // Reset resets the entry for reuse in the pool
 func (e *Entry) Reset() {
-	e.Level = 0
+	e.Level = InfoLevel
 	e.Message = ""
 	e.Fields = nil
 	e.Time = time.Time{}
@@ -91,6 +104,11 @@ type Logger interface {
 	InfoFast(msg string)
 	WarnFast(msg string)
 	ErrorFast(msg string)
+
+	// Log with a custom level
+	Log(level Level, args ...interface{})
+	Logf(level Level, format string, args ...interface{})
+	LogFast(level Level, msg string)
 
 	WithFields(fields Fields) Logger
 	WithContext(ctx context.Context) Logger
@@ -295,7 +313,7 @@ func (l *logger) runHooks(entry *Entry) {
 
 // log creates and handles a log entry
 func (l *logger) log(level Level, args ...interface{}) {
-	if level < l.level {
+	if level.Value < l.level.Value {
 		return
 	}
 
@@ -331,7 +349,7 @@ func (l *logger) log(level Level, args ...interface{}) {
 
 // logf creates and handles a formatted log entry
 func (l *logger) logf(level Level, format string, args ...interface{}) {
-	if level < l.level {
+	if level.Value < l.level.Value {
 		return
 	}
 
@@ -367,7 +385,7 @@ func (l *logger) logf(level Level, format string, args ...interface{}) {
 
 // logFast creates and handles a log entry without string formatting (for performance)
 func (l *logger) logFast(level Level, msg string) {
-	if level < l.level {
+	if level.Value < l.level.Value {
 		return
 	}
 
@@ -401,86 +419,47 @@ func (l *logger) logFast(level Level, msg string) {
 	putEntryToPool(entry)
 }
 
+// Log logs a message at a custom level.
+func (l *logger) Log(level Level, args ...interface{}) {
+	l.log(level, args...)
+}
+
+// Logf logs a formatted message at a custom level.
+func (l *logger) Logf(level Level, format string, args ...interface{}) {
+	l.logf(level, format, args...)
+}
+
+// LogFast logs a message at a custom level (fast path).
+func (l *logger) LogFast(level Level, msg string) {
+	l.logFast(level, msg)
+}
+
 // Debug logs a debug message
-func (l *logger) Debug(args ...interface{}) {
-	l.log(DebugLevel, args...)
-}
+func (l *logger) Debug(args ...interface{}) { l.log(DebugLevel, args...) }
+func (l *logger) Info(args ...interface{})  { l.log(InfoLevel, args...) }
+func (l *logger) Warn(args ...interface{})  { l.log(WarnLevel, args...) }
+func (l *logger) Error(args ...interface{}) { l.log(ErrorLevel, args...) }
+func (l *logger) Fatal(args ...interface{}) { l.log(FatalLevel, args...); os.Exit(1) }
+func (l *logger) Panic(args ...interface{}) { l.log(PanicLevel, args...); panic(fmt.Sprint(args...)) }
 
-// Info logs an info message
-func (l *logger) Info(args ...interface{}) {
-	l.log(InfoLevel, args...)
-}
-
-// Warn logs a warning message
-func (l *logger) Warn(args ...interface{}) {
-	l.log(WarnLevel, args...)
-}
-
-// Error logs an error message
-func (l *logger) Error(args ...interface{}) {
-	l.log(ErrorLevel, args...)
-}
-
-// Fatal logs a fatal message and exits
-func (l *logger) Fatal(args ...interface{}) {
-	l.log(FatalLevel, args...)
-	os.Exit(1)
-}
-
-// Panic logs a panic message and panics
-func (l *logger) Panic(args ...interface{}) {
-	l.log(PanicLevel, args...)
-	panic(fmt.Sprint(args...))
-}
-
-// Debugf logs a formatted debug message
-func (l *logger) Debugf(format string, args ...interface{}) {
-	l.logf(DebugLevel, format, args...)
-}
-
-// Infof logs a formatted info message
-func (l *logger) Infof(format string, args ...interface{}) {
-	l.logf(InfoLevel, format, args...)
-}
-
-// Warnf logs a formatted warning message
-func (l *logger) Warnf(format string, args ...interface{}) {
-	l.logf(WarnLevel, format, args...)
-}
-
-// Errorf logs a formatted error message
-func (l *logger) Errorf(format string, args ...interface{}) {
-	l.logf(ErrorLevel, format, args...)
-}
-
-// Fatalf logs a formatted fatal message and exits
+func (l *logger) Debugf(format string, args ...interface{}) { l.logf(DebugLevel, format, args...) }
+func (l *logger) Infof(format string, args ...interface{})  { l.logf(InfoLevel, format, args...) }
+func (l *logger) Warnf(format string, args ...interface{})  { l.logf(WarnLevel, format, args...) }
+func (l *logger) Errorf(format string, args ...interface{}) { l.logf(ErrorLevel, format, args...) }
 func (l *logger) Fatalf(format string, args ...interface{}) {
 	l.logf(FatalLevel, format, args...)
 	os.Exit(1)
 }
-
-// Panicf logs a formatted panic message and panics
 func (l *logger) Panicf(format string, args ...interface{}) {
 	l.logf(PanicLevel, format, args...)
 	panic(fmt.Sprintf(format, args...))
 }
 
 // Fast logging methods for performance-critical applications
-func (l *logger) DebugFast(msg string) {
-	l.logFast(DebugLevel, msg)
-}
-
-func (l *logger) InfoFast(msg string) {
-	l.logFast(InfoLevel, msg)
-}
-
-func (l *logger) WarnFast(msg string) {
-	l.logFast(WarnLevel, msg)
-}
-
-func (l *logger) ErrorFast(msg string) {
-	l.logFast(ErrorLevel, msg)
-}
+func (l *logger) DebugFast(msg string) { l.logFast(DebugLevel, msg) }
+func (l *logger) InfoFast(msg string)  { l.logFast(InfoLevel, msg) }
+func (l *logger) WarnFast(msg string)  { l.logFast(WarnLevel, msg) }
+func (l *logger) ErrorFast(msg string) { l.logFast(ErrorLevel, msg) }
 
 // Helper functions:
 func callerString() string {
