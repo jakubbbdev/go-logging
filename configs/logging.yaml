@@ -1,0 +1,46 @@
+# Go Logging Library Configuration
+# This file demonstrates all available configuration options
+
+# Basic logging configuration
+level: "info"
+format: "json"  # "text" or "json"
+output: "console"  # "console", "file", or "http"
+
+# Optional features
+include_caller: true
+include_stack: true
+timestamp_format: "2006-01-02 15:04:05.000"
+use_colors: true
+
+# Default fields added to every log entry
+default_fields:
+  service: "my-application"
+  version: "1.0.0"
+  environment: "production"
+
+# File handler configuration (when output: "file")
+file:
+  path: "logs/app.log"
+  max_size: 10485760  # 10MB in bytes
+  max_files: 5
+  rotate: true
+
+# HTTP handler configuration (when output: "http")
+http:
+  url: "https://logs.example.com/api/logs"
+  timeout: 30
+  headers:
+    Authorization: "Bearer your-token-here"
+    Content-Type: "application/json"
+
+# Async logging configuration
+async:
+  buffer_size: 1000
+  workers: 4
+
+# Metrics configuration
+metrics:
+  enabled: true
+  port: 8080
+  path: "/metrics"
+  namespace: "logging" 

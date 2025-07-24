@@ -1,19 +1,26 @@
 # Go Logging Library
 
-A modern, flexible, and feature-rich logging library for Go applications. This library provides structured logging with multiple output formats, log levels, and customizable handlers with **performance optimizations** and **advanced features**.
+A modern, flexible, and **enterprise-ready** logging library for Go applications. This library provides structured logging with multiple output formats, log levels, customizable handlers, **performance optimizations**, **security features**, **metrics collection**, **distributed tracing**, and **configuration management**.
 
 ## 🚀 Features
 
-- **Multiple Log Levels**: Debug, Info, Warn, Error, Fatal, Panic
+### Core Features
+- **Multiple Log Levels**: Debug, Info, Warn, Error, Fatal, Panic + Custom Levels
 - **Structured Logging**: JSON and text output formats
-- **Customizable Handlers**: Console, file, rotating file, HTTP, and custom handlers
+- **Customizable Handlers**: Console, file, rotating file, HTTP, async, and custom handlers
 - **Performance Optimized**: Zero-allocation logging with entry pooling
-- **Async Logging**: Non-blocking logging with worker pools
-- **Log Sampling**: Reduce log volume with configurable sampling rates
-- **Color Support**: Colored output for better readability
-- **Context Support**: Add fields and context to log entries
-- **Hooks**: Add custom hooks for metrics, audit, etc.
 - **Thread Safe**: Safe for concurrent use
+
+### Enterprise Features
+- **📋 Configuration Management**: YAML, JSON, and environment variable support
+- **🌍 Global Logger**: Singleton pattern with convenient helper functions
+- **📊 Metrics Collection**: Prometheus-compatible metrics and HTTP endpoint
+- **🔍 Distributed Tracing**: Request IDs, trace IDs, span IDs, and user context
+- **🔒 Security & PII Detection**: Automatic sanitization of sensitive data
+- **⚡ Performance Features**: Async logging, sampling, and pooling
+- **🎨 Rich Formatting**: Colors, emojis, custom timestamps, field ordering
+- **🔗 Context Support**: Add fields and context to log entries
+- **🪝 Hooks System**: Custom hooks for metrics, audit, external integrations
 
 ## 📦 Installation
 
@@ -278,13 +285,179 @@ func (h *CustomHandler) Handle(entry *logging.Entry) error {
 logger.SetHandler(&CustomHandler{})
 ```
 
-## 📚 Examples
+## 🆕 Enterprise Features
 
-Check out the examples in the `cmd/examples/` directory:
+### 📋 Configuration Management
 
-- **Basic Example**: `go run cmd/examples/basic/main.go`
-- **Web Server Example**: `
+```go
+// From YAML file
+config, err := logging.LoadConfigFromFile("config.yaml")
+if err != nil {
+    log.Fatal(err)
+}
+
+logger, err := config.ToLogger()
+if err != nil {
+    log.Fatal(err)
+}
+
+// From environment variables
+config := logging.LoadConfigFromEnv()
+logger, err := config.ToLogger()
+
+// Initialize global logger from config
+err = logging.InitGlobalLogger(config)
 ```
+
+**Sample YAML Configuration:**
+```yaml
+level: "info"
+format: "json"
+output: "file"
+include_caller: true
+include_stack: true
+
+default_fields:
+  service: "my-app"
+  version: "1.0.0"
+
+file:
+  path: "logs/app.log"
+  rotate: true
+  max_size: 10485760  # 10MB
+  max_files: 5
+
+metrics:
+  enabled: true
+  port: 8080
+  path: "/metrics"
+```
+
+### 🌍 Global Logger
+
+```go
+// Set global logger
+globalLogger := logging.NewLogger(
+    logging.WithLevel(logging.InfoLevel),
+    logging.WithDefaultFields(logging.Fields{"app": "myapp"}),
+)
+logging.SetGlobalLogger(globalLogger)
+
+// Use global functions anywhere in your app
+logging.Info("Application started")
+logging.WithGlobalFields(logging.Fields{"module": "auth"}).Error("Auth failed")
+logging.Errorf("Error: %v", err)
+```
+
+### 📊 Metrics Collection
+
+```go
+// Create metrics collector
+metrics := logging.NewMetricsCollector()
+
+// Add metrics hook to logger
+logger := logging.NewLogger(
+    logging.WithHook(logging.NewMetricsHook(metrics)),
+)
+
+// Start metrics HTTP server
+go metrics.StartMetricsServer(":8080", "/metrics")
+
+// Get statistics
+stats := metrics.GetStats()
+fmt.Printf("Total logs: %d\n", getTotalLogs(stats.LogCount))
+```
+
+**Metrics Endpoint Output:**
+```
+# HELP logging_total Total number of log entries by level
+# TYPE logging_total counter
+logging_total{level="info"} 42
+logging_total{level="error"} 3
+
+# HELP logging_duration_seconds Total time spent logging by level
+# TYPE logging_duration_seconds counter
+logging_duration_seconds{level="info"} 0.002341
+```
+
+### 🔍 Distributed Tracing
+
+```go
+// Create trace context
+traceCtx := logging.NewTraceContext().
+    WithUserID("user123").
+    WithSessionID("session456")
+
+ctx := logging.WithTraceContext(context.Background(), traceCtx)
+
+// Log with tracing
+logger := logging.NewLogger(
+    logging.WithHook(logging.NewTracingHook()),
+)
+
+tracedLogger := logger.WithTrace(ctx)
+tracedLogger.Info("Request processed")
+// Output: {..., "trace_id": "abc123", "user_id": "user123", "request_id": "req456"}
+```
+
+### 🔒 Security & PII Detection
+
+```go
+// Create PII detector
+piiDetector := logging.NewPIIDetector()
+
+// Use security hook
+logger := logging.NewLogger(
+    logging.WithHook(logging.NewSecurityHook(piiDetector)),
+)
+
+// Or wrap formatter
+secureFormatter := logging.NewSecurityFormatter(
+    logging.NewJSONFormatter(), 
+    piiDetector,
+)
+
+// PII data is automatically sanitized
+logger.WithFields(logging.Fields{
+    "email":    "user@example.com",      // -> "us**@example.com"
+    "phone":    "555-123-4567",          // -> "***-***-4567"
+    "password": "secret123",             // -> "[REDACTED]"
+    "ssn":      "123-45-6789",          // -> "***-**-6789"
+}).Info("User data logged safely")
+```
+
+### 🏢 Enterprise Setup Example
+
+```go
+// Full enterprise configuration
+metrics := logging.NewMetricsCollector()
+piiDetector := logging.NewPIIDetector()
+
+logger := logging.NewLogger(
+    logging.WithLevel(logging.InfoLevel),
+    logging.WithCaller(true),
+    logging.WithStacktrace(true),
+    logging.WithFormatter(logging.NewSecurityFormatter(
+        logging.NewJSONFormatter(),
+        piiDetector,
+    )),
+    logging.WithDefaultFields(logging.Fields{
+        "service":     "enterprise-app",
+        "version":     "1.0.0",
+        "environment": "production",
+    }),
+    logging.WithHook(logging.NewMetricsHook(metrics)),
+    logging.WithHook(logging.NewSecurityHook(piiDetector)),
+    logging.WithHook(logging.NewTracingHook()),
+)
+
+// Start metrics server
+go metrics.StartMetricsServer(":8080", "/metrics")
+
+// Set as global logger
+logging.SetGlobalLogger(logger)
+```
+
 ## 🆕 Eigene Logging-Levels
 
 ```go
@@ -299,3 +472,40 @@ logger.Log(AuditLevel, "User audit event!", 123)
 logger.Logf(AuditLevel, "Audit for user %d", 123)
 logger.Log(logging.RegisterLevel("trace", 5), "Trace message!")
 ```
+
+## 🔧 Environment Variables
+
+Configure the library using environment variables:
+
+```bash
+# Basic configuration
+export LOG_LEVEL=debug
+export LOG_FORMAT=json
+export LOG_OUTPUT=file
+export LOG_INCLUDE_CALLER=true
+export LOG_INCLUDE_STACK=true
+
+# Default fields (comma-separated key=value pairs)
+export LOG_DEFAULT_FIELDS="service=myapp,version=1.0.0"
+
+# File configuration
+export LOG_FILE_PATH=logs/app.log
+export LOG_FILE_ROTATE=true
+export LOG_FILE_MAX_SIZE=10485760
+export LOG_FILE_MAX_FILES=5
+
+# Metrics configuration
+export LOG_METRICS_ENABLED=true
+export LOG_METRICS_PORT=8080
+export LOG_METRICS_PATH=/metrics
+```
+
+## 📚 Examples
+
+Check out the examples in the `cmd/examples/` directory:
+
+- **Basic Example**: `go run cmd/examples/basic/main.go`
+- **Web Server Example**: `go run cmd/examples/web/main.go`
+- **Advanced Features**: `go run cmd/examples/advanced/main.go`
+- **Modern Features**: `go run cmd/examples/modern/main.go`
+- **Enterprise Setup**: `go run cmd/examples/enterprise/main.go`

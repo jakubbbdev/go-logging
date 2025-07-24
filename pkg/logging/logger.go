@@ -112,6 +112,7 @@ type Logger interface {
 
 	WithFields(fields Fields) Logger
 	WithContext(ctx context.Context) Logger
+	WithTrace(ctx context.Context) Logger
 	SetLevel(level Level)
 	SetHandler(handler Handler)
 	SetFormatter(formatter Formatter)
