@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # High-Performance Logging Service
+  go-logging-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-logging-demo
+    environment:
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=json
+      - LOG_OUTPUT=console
+      - JSON_LOGS=true
+      - LOG_USE_COLORS=false
+      - SERVICE_NAME=go-logging-app
+      - VERSION=1.0.0
+      - ENVIRONMENT=docker
+      - LOG_METRICS_ENABLED=true
+      - LOG_METRICS_PORT=8080
+      - LOG_METRICS_PATH=/metrics
+      - CONTAINER_NAME=go-logging-demo
+      - IMAGE_NAME=go-logging:latest
+      - IMAGE_TAG=latest
+    ports:
+      - "8080:8080"  # Metrics endpoint
+    volumes:
+      - ./logs:/var/log/app
+    networks:
+      - logging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/main", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "logging.service=go-logging-app"
+      - "logging.version=1.0.0"
+      - "logging.environment=docker"
+
+  # Performance Benchmark Service
+  performance-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-logging-performance
+    environment:
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_OUTPUT=console
+      - JSON_LOGS=true
+      - SERVICE_NAME=performance-test
+      - VERSION=1.0.0
+      - ENVIRONMENT=benchmark
+      - ENABLE_ZERO_ALLOC=true
+      - BUFFER_POOL_SIZE=10000
+      - BATCH_SIZE=1000
+      - FLUSH_INTERVAL=50ms
+    command: ["/main", "--benchmark", "--iterations=1000000"]
+    networks:
+      - logging-network
+    depends_on:
+      - go-logging-app
+    profiles:
+      - benchmark
+
+  # Log Aggregation with ELK-like setup (Simplified)
+  log-collector:
+    image: fluent/fluent-bit:latest
+    container_name: log-collector
+    volumes:
+      - ./configs/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./logs:/var/log/app:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - logging-network
+    depends_on:
+      - go-logging-app
+    profiles:
+      - monitoring
+
+  # Prometheus for Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - logging-network
+    profiles:
+      - monitoring
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configs/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./configs/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - logging-network
+    profiles:
+      - monitoring
+
+  # Redis for Distributed Logging Cache
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - logging-network
+    profiles:
+      - cache
+
+  # Load Test Service
+  load-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: load-test
+    environment:
+      - LOG_LEVEL=warn
+      - LOG_FORMAT=json
+      - SERVICE_NAME=load-test
+      - ENVIRONMENT=load-test
+      - CONCURRENT_LOGGERS=100
+      - LOGS_PER_SECOND=10000
+    command: ["/main", "--load-test", "--duration=60s"]
+    networks:
+      - logging-network
+    depends_on:
+      - go-logging-app
+    profiles:
+      - load-test
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  redis-data:
+
+networks:
+  logging-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 
